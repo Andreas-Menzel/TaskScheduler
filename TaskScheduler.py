@@ -1,7 +1,7 @@
 from calendar import monthrange
 import threading
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import time
 
 
@@ -53,11 +53,12 @@ def datetime_scheduler_main(cond_obj):
                 task_time = schedule_tasks['datetime'][task]['time']
                 years   = task_time['years']
                 months  = task_time['months']
+                weeks   = task_time['weeks']
                 days    = task_time['days']
                 hours   = task_time['hours']
                 minutes = task_time['minutes']
                 seconds = task_time['seconds']
-                next_execution_time = get_next_execution_datetime(years, months, [], days, hours, minutes, seconds)
+                next_execution_time = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
                 tasks[task] = next_execution_time
             datetime_tasks_added = []
@@ -80,11 +81,12 @@ def datetime_scheduler_main(cond_obj):
                 task_time = schedule_tasks['datetime'][task_id]['time']
                 years   = task_time['years']
                 months  = task_time['months']
+                weeks   = task_time['weeks']
                 days    = task_time['days']
                 hours   = task_time['hours']
                 minutes = task_time['minutes']
                 seconds = task_time['seconds']
-                next_execution_time = get_next_execution_datetime(years, months, [], days, hours, minutes, seconds)
+                next_execution_time = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
                 tasks[task_id] = next_execution_time
 
@@ -127,6 +129,8 @@ def get_next_execution_datetime(years, months, weeks, days, hours, minutes, seco
         years = list(range(now.year, now.year + 10))
     if not months or months is None:
         months = list(range(1, 13))
+    if not weeks or weeks is None:
+        weeks = list(range(1, 54))
     if not days or days is None:
         days = list(range(1, 32))
     if not hours or hours is None:
@@ -170,6 +174,10 @@ def get_next_execution_datetime(years, months, weeks, days, hours, minutes, seco
                 if days[i_day] > (lambda x: x[1])(monthrange(years[i_year], months[i_month])):
                     continue
                 if not in_future and days[i_day] < now.day:
+                    continue
+
+                week_number = date(years[i_year], months[i_month], days[i_day]).isocalendar().week
+                if not week_number in weeks:
                     continue
 
                 if not in_future and days[i_day] > now.day:
@@ -368,4 +376,4 @@ def reccuring_schedule(function, delay, delay_as_pause, max_jobs = 1, queue_leng
 
 
 # DEBUG: Test task. Can be removed after testing.
-datetime_schedule('test_task', test_function, [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+datetime_schedule('test_task', test_function, [], [], 19, [], [], [], [], catchup = False, catchup_delay = None)
