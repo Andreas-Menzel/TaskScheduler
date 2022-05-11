@@ -242,6 +242,9 @@ def get_next_execution_datetime(years, months, weeks, days, hours, minutes, seco
 #
 # @info     Set year / month / ... = None or empty list to execute the function
 #               at every year / month / ...
+#
+# @raises   ValueError                  Raises a ValueError if the given task_id
+#                                           is already in use.
 def datetime_schedule(task_id, function, year, month, week, day, hour, minute, second, catchup = False, catchup_delay = None):
     global datetime_scheduler_cond
     global datetime_scheduler_thread
@@ -258,10 +261,7 @@ def datetime_schedule(task_id, function, year, month, week, day, hour, minute, s
 
     # Check if task_id is unused
     if task_id in scheduler:
-        print('ERROR: Task-ID is already in use!')
-        # throw exception ?
-
-    # TODO: check if function exists(?)
+        raise ValueError(f'Task-ID "{task_id}" is already in use!')
 
     # Convert time variables to lists, if necessary
     if year is None:
