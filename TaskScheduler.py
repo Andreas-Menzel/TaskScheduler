@@ -6,8 +6,8 @@ import time
 
 
 # DEBUG: Test function. Can be removed after testing.
-def test_function():
-    print('Test function called.')
+def test_function(arg1, arg2):
+    print(f'Test function called with arguments {arg1} & {arg2}.')
 
 
 # This holds information about all tasks
@@ -76,7 +76,8 @@ def datetime_scheduler_main(cond_obj):
                     max_wait = seconds_remaining
             else:
                 # task should be started
-                task_thread = threading.Thread(target=schedule_tasks['datetime'][task_id]['function']).start()
+                task_information = schedule_tasks['datetime'][task_id]
+                task_thread = threading.Thread(target=task_information['function'], args=(task_information['arguments'])).start()
 
                 task_time = schedule_tasks['datetime'][task_id]['time']
                 years   = task_time['years']
@@ -234,6 +235,7 @@ def get_next_execution_datetime(years, months, weeks, days, hours, minutes, seco
 #               create a new thread for each scheduling event.
 #
 # @param    labmda      function        Function to be executed.
+# @param    []          arguments       Arguments for the function.
 #
 # @param    int / [int] year            Year.
 # @param    int / [int] month           Month.
@@ -253,7 +255,7 @@ def get_next_execution_datetime(years, months, weeks, days, hours, minutes, seco
 #
 # @raises   ValueError                  Raises a ValueError if the given task_id
 #                                           is already in use.
-def datetime_schedule(task_id, function, year, month, week, day, hour, minute, second, catchup = False, catchup_delay = None):
+def datetime_schedule(task_id, function, arguments, year, month, week, day, hour, minute, second, catchup = False, catchup_delay = None):
     global datetime_scheduler_cond
     global datetime_scheduler_thread
     global datetime_tasks_added
@@ -333,8 +335,9 @@ def datetime_schedule(task_id, function, year, month, week, day, hour, minute, s
     # add scheduling event to scheduler if it should be executed in the future
     if not next_execution_datetime is None:
         scheduler[task_id] = {
-            'function' : function,
-            'time'     : {
+            'function'  : function,
+            'arguments' : arguments,
+            'time'      : {
                 'years'    : years,
                 'months'   : months,
                 'weeks'    : weeks,
@@ -376,4 +379,4 @@ def reccuring_schedule(function, delay, delay_as_pause, max_jobs = 1, queue_leng
 
 
 # DEBUG: Test task. Can be removed after testing.
-datetime_schedule('test_task', test_function, [], [], 19, [], [], [], [], catchup = False, catchup_delay = None)
+datetime_schedule('test_task', test_function, ['first argument', 'second argument'], [], [], 19, [], [], [], [], catchup = False, catchup_delay = None)
