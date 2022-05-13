@@ -11,9 +11,10 @@ def test_function(arg1, arg2):
 
 
 # This holds information about all tasks
-schedule_tasks = { 'datetime': {}, 'reccuring': [] }
+schedule_tasks = { 'datetime': {}, 'reccuring': {} }
 
 
+# Condition and thread variables for the datetime scheduler
 datetime_scheduler_cond = threading.Condition()
 datetime_scheduler_thread = None
 
@@ -21,6 +22,16 @@ datetime_scheduler_thread = None
 #     these tasks according to the information in schedule_tasks.
 datetime_tasks_added = []
 datetime_tasks_added_lock = threading.Lock()
+
+
+# Condition and thread variables for the reccuring scheduler
+reccuring_scheduler_cond = threading.Condition()
+reccuring_scheduler_thread = None
+
+# New task ids will be added here. The reccuring scheduler will then activate
+#     these tasks according to the information in schedule_tasks.
+reccuring_tasks_added = []
+reccuring_tasks_added_lock = threading.Lock()
 
 
 # datetime_scheduler_main
@@ -236,6 +247,8 @@ def get_next_execution_datetime(years, months, weeks, days, hours, minutes, seco
 # @desc     Executes the function 'function' at the given time(s). This will
 #               create a new thread for each scheduling event.
 #
+# @param    string      task_id         Task identifier.
+#
 # @param    labmda      function        Function to be executed.
 # @param    []          arguments       Arguments for the function.
 #
@@ -358,27 +371,118 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
             datetime_scheduler_cond.notify()
 
 
+# reccuring_scheduler_main
+#
+# @desc     This function will start the reccuring tasks.
+#
+# @param    Condition() cond_obj    A threading condition object to manage
+#                                       wait() and notify().
+#
+# @note     Since this function uses wait() and relies on being notify()ed, it
+#               has to be executed in a seperate thread. Use notify() whenever a
+#               new task is added.
+# @note     The first execution of function will be immediately after calling
+#               this function.
+def reccuring_scheduler_main(cond_obj):
+    global reccuring_tasks_added
+    global reccuring_tasks_added_lock
+    global schedule_tasks
+
+    # <task_id> : <next_execution_time>
+    tasks = {}
+
+    # Wait for a task to be added
+    with cond_obj:
+        cond_obj.wait()
+
+    while True:
+        # check if new tasks were added
+        reccuring_tasks_added_lock.acquire()
+        if reccuring_tasks_added:
+            for task in reccuring_tasks_added:
+                next_execution_time = datetime.now()
+
+                tasks[task] = next_execution_time
+            reccuring_tasks_added = []
+        reccuring_tasks_added_lock.release()
+
+        # get next task and execution time (seconds remaining) and start tasks
+        max_wait = -1
+        for task_id, task in tasks.items():
+            time_diff = task - datetime.now()
+            seconds_remaining = time_diff.total_seconds()
+
+            if seconds_remaining > 0:
+                # task in future
+                if seconds_remaining < max_wait or max_wait == -1:
+                    max_wait = seconds_remaining
+            else:
+                # task should be started
+                task_information = schedule_tasks['reccuring'][task_id]
+                task_thread = threading.Thread(target=task_information['function'], args=(task_information['arguments'])).start()
+
+                next_execution_time = datetime.now() + task_information['timedelta']
+
+                tasks[task_id] = next_execution_time
+
+                time_diff = next_execution_time - datetime.now()
+                seconds_remaining = time_diff.total_seconds()
+
+                # TODO: seconds_remaining is always > 0 (?)
+                if seconds_remaining > 0:
+                    if seconds_remaining < max_wait or max_wait == -1:
+                        max_wait = seconds_remaining
+
+        with cond_obj:
+            if max_wait > 0:
+                cond_obj.wait(max_wait)
+            else:
+                cond_obj.wait()
+
+
 # TODO
 #
 # reccuring_schedule
 #
 # @desc     Executes the function 'function' every delay seconds.
 #
+# @param    string      task_id         Task identifier.
+#
 # @param    labmda      function        Function to be executed.
-# @param    int         delay           Delay.
-# @param    bool        delay_as_pause  If true: will pause delay seconds
-#                                           between each scheduling event.
-#                                       If false: starting time of scheduling
-#                                           events is delay seconds apart.
-# @param    int         max_jobs        Maximum number of jobs running
-#                                           simultaneously.
-# @param    int         queue_length    Length of the queue containing missed
-#                                           scheduling events.
-def reccuring_schedule(function, delay, delay_as_pause, max_jobs = 1, queue_length = 0):
-    # perform scheduling
-    pass
+# @param    []          arguments       Arguments for the function.
+#
+# @param    int         timedelta       "Delay".
+def reccuring_schedule(task_id, function, arguments, timedelta):
+    global reccuring_scheduler_cond
+    global reccuring_scheduler_thread
+
+    # Create and start the scheduling thread if it does not yet exist.
+    if reccuring_scheduler_thread is None:
+        reccuring_scheduler_thread = threading.Thread(target=reccuring_scheduler_main, args=(reccuring_scheduler_cond,)).start()
+
+    scheduler = schedule_tasks['reccuring']
+
+    # Check if task_id is unused
+    if task_id in scheduler:
+        raise ValueError(f'Task-ID "{task_id}" is already in use!')
+
+    scheduler[task_id] = {
+        'function'  : function,
+        'arguments' : arguments,
+        'timedelta' : timedelta
+        }
+
+    reccuring_tasks_added_lock.acquire()
+    reccuring_tasks_added.append(task_id)
+    reccuring_tasks_added_lock.release()
+
+    with reccuring_scheduler_cond:
+        reccuring_scheduler_cond.notify()
 
 
 
 # DEBUG: Test task. Can be removed after testing.
-datetime_schedule('test_task', test_function, ['first argument', 'second argument'], [], [], 19, [], [], [], [], catchup = False, catchup_delay = None)
+#datetime_schedule('test_task', test_function, ['first argument', 'second argument'], [], [], 19, [], [], [], [], catchup = False, catchup_delay = None)
+
+# DEBUG: Test task. Can be removed after testing.
+reccuring_schedule('test_task', test_function, ['first argument', 'second argument'], timedelta(seconds=0.5))
