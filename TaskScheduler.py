@@ -6,12 +6,14 @@ import time
 
 
 # DEBUG: Test function. Can be removed after testing.
-def test_function(arg1, arg2):
-    print(f'Test function called with arguments {arg1} & {arg2}.')
+def test_function():
+    print(f'Test function started.')
+    time.sleep(2)
+    print(f'Test function ended.')
 
 
 # This holds information about all tasks
-schedule_tasks = { 'datetime': {}, 'reccuring': {} }
+schedule_tasks = { 'datetime': {}, 'reccuring': {'tasks': {}, 'groups': {}} }
 
 
 # Condition and thread variables for the datetime scheduler
@@ -32,6 +34,22 @@ reccuring_scheduler_thread = None
 #     these tasks according to the information in schedule_tasks.
 reccuring_tasks_added = []
 reccuring_tasks_added_lock = threading.Lock()
+
+# {
+#     'tasks' : {
+#         <task_id> : {
+#             'currently_running' : <num_active_threads>,
+#             TODO: threads: ...
+#         }, ...
+#     }
+#     'groups' : {
+#         <group_id> : {
+#             'currently_running' : <num_active_threads>
+#         }, ...
+#     }
+# }
+reccuring_tasks_running = { 'tasks' : {}, 'groups' : {} }
+reccuring_tasks_running_lock = threading.Lock()
 
 
 # datetime_scheduler_main
@@ -389,7 +407,7 @@ def reccuring_scheduler_main(cond_obj):
     global schedule_tasks
 
     # <task_id> : <next_execution_time>
-    tasks = {}
+    all_tasks = {}
 
     # Wait for a task to be added
     with cond_obj:
@@ -402,13 +420,36 @@ def reccuring_scheduler_main(cond_obj):
             for task in reccuring_tasks_added:
                 next_execution_time = datetime.now()
 
-                tasks[task] = next_execution_time
+                all_tasks[task] = next_execution_time
             reccuring_tasks_added = []
         reccuring_tasks_added_lock.release()
 
+
+        # for all tasks:
+        #     get next max_wait
+        #     if next_execution_time <= 0:
+        #         exec_tasks[group_id] = [task_id_1, ...]
+        # for all groups sorted by priority high to low:
+        #     if not num_tasks < max_tasks:
+        #         continue
+        #     for all tasks in group sorted by high to low:
+        #         if num_tasks < max_tasks AND num_instances < max_instances:
+        #             start task
+
+        # {
+        #     <group_priority> : {
+        #         <group_id> : {
+        #             <task_priority> : [
+        #                 <task_id_1>, ...
+        #             ], ...
+        #         }
+        #     }, ...
+        # }
+        exec_tasks = {}
+
         # get next task and execution time (seconds remaining) and start tasks
         max_wait = -1
-        for task_id, task in tasks.items():
+        for task_id, task in all_tasks.items():
             time_diff = task - datetime.now()
             seconds_remaining = time_diff.total_seconds()
 
@@ -418,20 +459,97 @@ def reccuring_scheduler_main(cond_obj):
                     max_wait = seconds_remaining
             else:
                 # task should be started
-                task_information = schedule_tasks['reccuring'][task_id]
-                task_thread = threading.Thread(target=task_information['function'], args=(task_information['arguments'])).start()
+                s_task = schedule_tasks['reccuring']['tasks'][task_id]
+                for group in s_task['groups']:
+                    group_priority = schedule_tasks['reccuring']['groups'][group]['priority']
+                    task_priority_static, task_priority_dynamic = s_task['priority']
+                    task_priority = task_priority_static + (seconds_remaining * -1) * task_priority_dynamic
 
-                next_execution_time = datetime.now() + task_information['timedelta']
+                    # create group_priority entry if not exist
+                    if not group_priority in exec_tasks:
+                        exec_tasks[group_priority] = {}
+                    # create group entry if not exist
+                    if not group in exec_tasks[group_priority]:
+                        exec_tasks[group_priority][group] = {}
+                    # create task_priority entry if not exist
+                    if not task_priority in exec_tasks[group_priority][group]:
+                        exec_tasks[group_priority][group][task_priority] = []
+                    # add task
+                    exec_tasks[group_priority][group][task_priority].append(task_id)
 
-                tasks[task_id] = next_execution_time
+        reccuring_tasks_running_lock.acquire()
+        rtr = reccuring_tasks_running
+        group_priorities_sorted = sorted(list(exec_tasks.keys()), reverse = True)
+        for group_priority in group_priorities_sorted:
+            groups = exec_tasks[group_priority]
+            for group_id, group in groups.items():
 
-                time_diff = next_execution_time - datetime.now()
-                seconds_remaining = time_diff.total_seconds()
+                # Add group if not exist
+                if not group_id in rtr['groups']:
+                    rtr['groups'][group_id] = {}
+                # Add currently_running if not exist
+                if not 'currently_running' in rtr['groups'][group_id]:
+                    rtr['groups'][group_id]['currently_running'] = 0
 
-                # TODO: seconds_remaining is always > 0 (?)
-                if seconds_remaining > 0:
-                    if seconds_remaining < max_wait or max_wait == -1:
-                        max_wait = seconds_remaining
+                # Check if another task can be started in this group
+                group_currently_running = rtr['groups'][group_id]['currently_running']
+                group_max_tasks = schedule_tasks['reccuring']['groups'][group_id]['max_tasks']
+                if not group_max_tasks == -1 and group_currently_running >= group_max_tasks:
+                    # DEBUG
+                    print(f'Not starting task. Already running maximum number of tasks in this group: {group_currently_running} / {schedule_tasks["reccuring"]["groups"][group_id]["max_tasks"]}')
+                    continue
+
+                task_priorities_sorted = sorted(list(group.keys()), reverse = True)
+                for task_priority in task_priorities_sorted:
+                    tasks = group[task_priority]
+                    for task in tasks:
+
+
+                        # Add task if not exist
+                        if not task in rtr['tasks']:
+                            rtr['tasks'][task] = {}
+                        # Add currently_running if not exist
+                        if not 'currently_running' in rtr['tasks'][task]:
+                            rtr['tasks'][task]['currently_running'] = 0
+
+                        # Check if another instance of this task can be started
+                        task_currently_running = rtr['tasks'][task]['currently_running']
+                        task_max_instances = schedule_tasks['reccuring']['tasks'][task]['max_instances']
+                        if not task_max_instances == -1 and task_currently_running >= task_max_instances:
+                            # DEBUG
+                            print('Not starting task. Already running maximum number of instances.')
+                            continue
+
+                        # Increase running counter
+                        rtr['tasks'][task]['currently_running'] += 1
+
+                        # Add groups if not exist
+                        for task_group in schedule_tasks['reccuring']['tasks'][task]['groups']:
+                            if not task_group in rtr['groups']:
+                                rtr['groups'][task_group] = {}
+                            if not 'currently_running' in rtr['groups'][task_group]:
+                                rtr['groups'][task_group]['currently_running'] = 0
+                            rtr['groups'][task_group]['currently_running'] += 1
+
+
+                        task_information = schedule_tasks['reccuring']['tasks'][task]
+                        task_thread = threading.Thread(target=reccuring_scheduler_execute_function, args=(  cond_obj,
+                                                                                                            task, task_information['groups'],
+                                                                                                            task_information['function'], task_information['arguments'])).start()
+
+                        next_execution_time = datetime.now() + task_information['timedelta']
+
+                        all_tasks[task] = next_execution_time
+
+                        time_diff = next_execution_time - datetime.now()
+                        seconds_remaining = time_diff.total_seconds()
+
+                        if seconds_remaining > 0:
+                            if seconds_remaining < max_wait or max_wait == -1:
+                                max_wait = seconds_remaining
+
+        reccuring_tasks_running_lock.release()
+
 
         with cond_obj:
             if max_wait > 0:
@@ -440,19 +558,63 @@ def reccuring_scheduler_main(cond_obj):
                 cond_obj.wait()
 
 
-# TODO
+# reccuring_scheduler_execute_function
 #
+# @desc Calls the function with the arguments.
+#
+# @param    Condition   scheduler_cond  Scheduler condition object. This will
+#                                           be used to notify() the scheduler
+#                                           thread after the function was
+#                                           executed.
+#
+# @param    string      task_id         ID of the task.
+#
+# @param    labmda      function        Function to be executed.
+# @param    []          arguments       Arguments for the function.
+#
+# @param    Lock()      task_lock
+def reccuring_scheduler_execute_function(scheduler_cond, task_id, task_groups, function, arguments):
+    global reccuring_tasks_running
+    global reccuring_tasks_running_lock
+
+    function(*arguments)
+
+    # Decrease currently_running
+    reccuring_tasks_running_lock.acquire()
+
+    reccuring_tasks_running['tasks'][task_id]['currently_running'] -= 1
+
+    for task_group in task_groups:
+        reccuring_tasks_running['groups'][task_group]['currently_running'] -= 1
+
+    reccuring_tasks_running_lock.release()
+
+    with scheduler_cond:
+        scheduler_cond.notify()
+
+
 # reccuring_schedule
 #
 # @desc     Executes the function 'function' every delay seconds.
 #
 # @param    string      task_id         Task identifier.
+# @param    [string]    groups          Groups the task is part of.
 #
 # @param    labmda      function        Function to be executed.
 # @param    []          arguments       Arguments for the function.
 #
 # @param    int         timedelta       "Delay".
-def reccuring_schedule(task_id, function, arguments, timedelta):
+#
+# @param    int         max_instances   Maximum number of instances of the
+#                                           function running simultaniously.
+# @param    (int, int)  priority        Priority of the task. The first value
+#                                           is the "fixed" priority. The second
+#                                           value will be multiplied with the
+#                                           number of second the task is
+#                                           overdue.
+#
+# @info     total_priority = first_val + <seconds_overdue> * second_val
+def reccuring_schedule(task_id, groups, function, arguments, timedelta, max_instances = 1, priority = (0, 0)):
     global reccuring_scheduler_cond
     global reccuring_scheduler_thread
 
@@ -460,29 +622,58 @@ def reccuring_schedule(task_id, function, arguments, timedelta):
     if reccuring_scheduler_thread is None:
         reccuring_scheduler_thread = threading.Thread(target=reccuring_scheduler_main, args=(reccuring_scheduler_cond,)).start()
 
-    scheduler = schedule_tasks['reccuring']
+    scheduler = schedule_tasks['reccuring']['tasks']
 
     # Check if task_id is unused
     if task_id in scheduler:
         raise ValueError(f'Task-ID "{task_id}" is already in use!')
 
     scheduler[task_id] = {
-        'function'  : function,
-        'arguments' : arguments,
-        'timedelta' : timedelta
+        'groups'        : groups,
+        'function'      : function,
+        'arguments'     : arguments,
+        'timedelta'     : timedelta,
+        'max_instances' : max_instances,
+        'priority'      : priority
         }
 
     reccuring_tasks_added_lock.acquire()
     reccuring_tasks_added.append(task_id)
     reccuring_tasks_added_lock.release()
 
+    # Create groups that do not exist
+    for group in groups:
+        if not group in schedule_tasks['reccuring']['groups']:
+            set_reccuring_group(group, -1)
+
     with reccuring_scheduler_cond:
         reccuring_scheduler_cond.notify()
 
 
+# reccuring_group
+#
+# @param    string      group_id        Group ID.
+# @param    int         max_tasks       Maximum number of tasks allowed to run
+#                                           simultaniously.
+# @param    int         priority        Priority of the group. Prefer a group
+#                                           with higher priority.
+#
+# @info     Set max_tasks = -1 for unlimited tasks.
+def set_reccuring_group(group_id, max_tasks, priority = 0):
+    global schedule_tasks
+
+    groups = schedule_tasks['reccuring']['groups']
+
+    groups[group_id] = {
+        'max_tasks' : max_tasks,
+        'priority'  : priority
+    }
+
 
 # DEBUG: Test task. Can be removed after testing.
-#datetime_schedule('test_task', test_function, ['first argument', 'second argument'], [], [], 19, [], [], [], [], catchup = False, catchup_delay = None)
+#datetime_schedule('test_task', test_function, ['first argument', 'second argument'], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
 
 # DEBUG: Test task. Can be removed after testing.
-reccuring_schedule('test_task', test_function, ['first argument', 'second argument'], timedelta(seconds=0.5))
+reccuring_schedule('test_task1', ['group1'], test_function, [], timedelta(seconds=1), 1, (10, 1))
+#reccuring_schedule('test_task2', ['group1'], test_function, [], timedelta(seconds=5), 1, (10, 1))
+#reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), 1, (10, 1))
