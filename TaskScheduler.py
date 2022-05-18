@@ -12,6 +12,18 @@ def test_function():
     print(f'Test function ended.')
 
 
+file_execution_log = 'TaskScheduler_execution.log'
+execution_log_write_interval = timedelta(seconds=5)
+execution_log_thread = None
+execution_log_thread_cond = threading.Condition()
+# {
+#     'datetime': { <task_id_1>: <last_execution_datetime>, ... }
+#     'reccuring': { <task_id_1>: <last_execution_datetime>, ... }
+# }
+execution_log_data = { 'datetime': {}, 'reccuring': {} }
+execution_log_data_lock = threading.Lock()
+
+
 # This holds information about all tasks
 schedule_tasks = { 'datetime': {}, 'reccuring': {'tasks': {}, 'groups': {}} }
 
@@ -63,6 +75,9 @@ reccuring_tasks_running_lock = threading.Lock()
 #               has to be executed in a seperate thread. Use notify() whenever a
 #               new task is added.
 def datetime_scheduler_main(cond_obj):
+    global execution_log_data_lock
+    global execution_log_data
+    global execution_log_thread_cond
     global datetime_tasks_added
     global datetime_tasks_added_lock
     global schedule_tasks
@@ -107,6 +122,15 @@ def datetime_scheduler_main(cond_obj):
                 # task should be started
                 task_information = schedule_tasks['datetime'][task_id]
                 task_thread = threading.Thread(target=task_information['function'], args=(task_information['arguments'])).start()
+
+                # Add function execution to execution log
+                execution_log_data_lock.acquire()
+                execution_log_data['datetime'][task_id] = datetime.now()
+                execution_log_data_lock.release()
+
+                # Notify execution logger
+                with execution_log_thread_cond:
+                    execution_log_thread_cond.notify()
 
                 task_time = schedule_tasks['datetime'][task_id]['time']
                 years   = task_time['years']
@@ -402,6 +426,8 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
 # @note     The first execution of function will be immediately after calling
 #               this function.
 def reccuring_scheduler_main(cond_obj):
+    global execution_log_data_lock
+    global execution_log_data
     global reccuring_tasks_added
     global reccuring_tasks_added_lock
     global schedule_tasks
@@ -536,6 +562,15 @@ def reccuring_scheduler_main(cond_obj):
                         task_thread = threading.Thread(target=reccuring_scheduler_execute_function, args=(  cond_obj,
                                                                                                             task, task_information['groups'],
                                                                                                             task_information['function'], task_information['arguments'])).start()
+
+                        # Add function execution to execution log
+                        execution_log_data_lock.acquire()
+                        execution_log_data['reccuring'][task] = datetime.now()
+                        execution_log_data_lock.release()
+
+                        # Notify execution logger
+                        with execution_log_thread_cond:
+                            execution_log_thread_cond.notify()
 
                         next_execution_time = datetime.now() + task_information['timedelta']
 
@@ -673,10 +708,48 @@ def set_reccuring_group(group_id, max_tasks, priority = 0):
     }
 
 
-# DEBUG: Test task. Can be removed after testing.
-#datetime_schedule('test_task', test_function, ['first argument', 'second argument'], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+def write_execution_log():
+    global execution_log_data
+    global execution_log_data_lock
+    global execution_log_thread_cond
+    global execution_log_write_interval
+    global file_execution_log
+
+    with execution_log_thread_cond:
+        execution_log_thread_cond.wait()
+
+    last_write = datetime.now()
+
+    while True:
+        # Wait if new file write would be too soon
+        if last_write + execution_log_write_interval > datetime.now():
+            with execution_log_thread_cond:
+                execution_log_thread_cond.wait()
+                continue
+
+        execution_log_data_lock.acquire()
+        with open(file_execution_log, 'w', encoding='utf-8') as file:
+            json.dump(execution_log_data, file, ensure_ascii=False, indent=4, default=str)
+        execution_log_data_lock.release()
+
+        last_write = datetime.now()
+
+        with execution_log_thread_cond:
+            execution_log_thread_cond.wait(execution_log_write_interval.seconds)
+
+
+execution_log_thread = threading.Thread(target=write_execution_log).start()
+with execution_log_thread_cond:
+    execution_log_thread_cond.notify()
 
 # DEBUG: Test task. Can be removed after testing.
-reccuring_schedule('test_task1', ['group1'], test_function, [], timedelta(seconds=1), 1, (10, 1))
-#reccuring_schedule('test_task2', ['group1'], test_function, [], timedelta(seconds=5), 1, (10, 1))
+datetime_schedule('DTS_test_task', test_function, [], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+
+
+# DEBUG: Test group
+set_reccuring_group('group1', 2, priority = 0)
+
+# DEBUG: Test task. Can be removed after testing.
+reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=1), 3, (10, 1))
+reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), 1, (10, 1))
 #reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), 1, (10, 1))
