@@ -729,9 +729,6 @@ def write_execution_log():
     global execution_log_write_interval
     global file_execution_log
 
-    with execution_log_thread_cond:
-        execution_log_thread_cond.wait()
-
     last_write = datetime.now()
 
     while True:
@@ -753,8 +750,6 @@ def write_execution_log():
 
 
 execution_log_thread = threading.Thread(target=write_execution_log).start()
-with execution_log_thread_cond:
-    execution_log_thread_cond.notify()
 
 # Read initial execution log, if exists
 if os.path.isfile(file_execution_log):
