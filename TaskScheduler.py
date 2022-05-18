@@ -617,6 +617,9 @@ def reccuring_scheduler_execute_function(scheduler_cond, task_id, task_groups, f
 def reccuring_schedule(task_id, groups, function, arguments, timedelta, max_instances = 1, priority = (0, 0)):
     global reccuring_scheduler_cond
     global reccuring_scheduler_thread
+    global reccuring_tasks_added
+    global reccuring_tasks_added_lock
+    global schedule_tasks
 
     # Create and start the scheduling thread if it does not yet exist.
     if reccuring_scheduler_thread is None:
