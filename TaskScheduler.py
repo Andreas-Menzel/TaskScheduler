@@ -769,6 +769,6 @@ if os.path.isfile(file_execution_log):
 set_reccuring_group('group1', 2, priority = 0)
 
 # DEBUG: Test task. Can be removed after testing.
-reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=10), , True, 3, (10, 1))
-#reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), , True, 1, (10, 1))
-#reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), , True, 1, (10, 1))
+reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=10), True, 3, (10, 1))
+#reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
+#reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
