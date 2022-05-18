@@ -735,7 +735,11 @@ def write_execution_log():
         # Wait if new file write would be too soon
         if last_write + execution_log_write_interval > datetime.now():
             with execution_log_thread_cond:
-                execution_log_thread_cond.wait()
+                next_log_write = last_write + execution_log_write_interval
+                max_wait = (next_log_write - datetime.now()).seconds
+                if max_wait <= 0:
+                    max_wait = 0.5
+                execution_log_thread_cond.wait(max_wait)
                 continue
 
         execution_log_data_lock.acquire()
