@@ -98,7 +98,7 @@ _RECCURING_TASKS_RUNNING = { 'tasks' : {}, 'groups' : {} }
 _RECCURING_TASKS_RUNNING_LOCK = threading.Lock()
 
 
-# datetime_scheduler_main
+# _datetime_scheduler_main
 #
 # @desc     This function will start the datetime tasks.
 #
@@ -108,7 +108,7 @@ _RECCURING_TASKS_RUNNING_LOCK = threading.Lock()
 # @note     Since this function uses wait() and relies on being notify()ed, it
 #               has to be executed in a seperate thread. Use notify() whenever a
 #               new task is added.
-def datetime_scheduler_main(cond_obj):
+def _datetime_scheduler_main(cond_obj):
     global _EXECUTION_LOG_DATA
     global _EXECUTION_LOG_DATA_CHANGED
     global _EXECUTION_LOG_DATA_LOCK
@@ -138,7 +138,7 @@ def datetime_scheduler_main(cond_obj):
                 hours   = task_time['hours']
                 minutes = task_time['minutes']
                 seconds = task_time['seconds']
-                next_execution_time = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
+                next_execution_time = _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
                 tasks[task] = next_execution_time
 
@@ -182,7 +182,7 @@ def datetime_scheduler_main(cond_obj):
                 hours   = task_time['hours']
                 minutes = task_time['minutes']
                 seconds = task_time['seconds']
-                next_execution_time = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
+                next_execution_time = _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
                 if not next_execution_time is None:
                     _LOGGER.debug(f'Next execution of datetime-task "{task_id}" is scheduled at {next_execution_time}.')
@@ -210,7 +210,7 @@ def datetime_scheduler_main(cond_obj):
                 cond_obj.wait()
 
 
-# get_next_execution_datetime
+# _get_next_execution_datetime
 #
 # @desc     Calculates the next execution datetime given possible values for
 #               year / month / ...
@@ -228,7 +228,7 @@ def datetime_scheduler_main(cond_obj):
 #
 # @returns  datetime        Datetime object of the next execution time.
 # @returns  None            None if no execution time in the future exists.
-def get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds):
+def _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds):
     now = datetime.now()
 
     if not years or years is None:
@@ -372,7 +372,7 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
 
     # Create and start the scheduling thread if it does not yet exist.
     if _DATETIME_SCHEDULER_THREAD is None:
-        _DATETIME_SCHEDULER_THREAD = threading.Thread(target=datetime_scheduler_main, args=(_DATETIME_SCHEDULER_COND,))
+        _DATETIME_SCHEDULER_THREAD = threading.Thread(target=_datetime_scheduler_main, args=(_DATETIME_SCHEDULER_COND,))
         _DATETIME_SCHEDULER_THREAD.start()
         _LOGGER.debug('Created and started _DATETIME_SCHEDULER_THREAD.')
 
@@ -441,7 +441,7 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
         else:
             seconds = [second]
 
-    next_execution_datetime = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
+    next_execution_datetime = _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
     # add scheduling event to scheduler if it should be executed in the future
     if not next_execution_datetime is None:
@@ -471,7 +471,7 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
         _LOGGER.info(f'Did not add datetime-task "{task_id}". No future execution datetime.')
 
 
-# reccuring_scheduler_main
+# _reccuring_scheduler_main
 #
 # @desc     This function will start the reccuring tasks.
 #
@@ -483,7 +483,7 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
 #               new task is added.
 # @note     The first execution of function will be immediately after calling
 #               this function.
-def reccuring_scheduler_main(cond_obj):
+def _reccuring_scheduler_main(cond_obj):
     global _EXECUTION_LOG_DATA
     global _EXECUTION_LOG_DATA_CHANGED
     global _EXECUTION_LOG_DATA_LOCK
@@ -621,7 +621,7 @@ def reccuring_scheduler_main(cond_obj):
 
                         _LOGGER.info(f'Starting reccuring-task "{task}".')
                         task_information = _SCHEDULE_TASKS['reccuring']['tasks'][task]
-                        task_thread = threading.Thread(target=reccuring_scheduler_execute_function, args=(  cond_obj,
+                        task_thread = threading.Thread(target=_reccuring_scheduler_execute_function, args=(  cond_obj,
                                                                                                             task, task_information['groups'],
                                                                                                             task_information['function'], task_information['arguments']))
                         task_thread.start()
@@ -658,7 +658,7 @@ def reccuring_scheduler_main(cond_obj):
                 cond_obj.wait()
 
 
-# reccuring_scheduler_execute_function
+# _reccuring_scheduler_execute_function
 #
 # @desc Calls the function with the arguments.
 #
@@ -673,7 +673,7 @@ def reccuring_scheduler_main(cond_obj):
 # @param    []          arguments       Arguments for the function.
 #
 # @param    Lock()      task_lock
-def reccuring_scheduler_execute_function(scheduler_cond, task_id, task_groups, function, arguments):
+def _reccuring_scheduler_execute_function(scheduler_cond, task_id, task_groups, function, arguments):
     global _RECCURING_TASKS_RUNNING
     global _RECCURING_TASKS_RUNNING_LOCK
 
@@ -729,7 +729,7 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
 
     # Create and start the scheduling thread if it does not yet exist.
     if _RECCURING_SCHEDULER_THREAD is None:
-        _RECCURING_SCHEDULER_THREAD = threading.Thread(target=reccuring_scheduler_main, args=(_RECCURING_SCHEDULER_COND,))
+        _RECCURING_SCHEDULER_THREAD = threading.Thread(target=_reccuring_scheduler_main, args=(_RECCURING_SCHEDULER_COND,))
         _RECCURING_SCHEDULER_THREAD.start()
         _LOGGER.debug('Created and started _RECCURING_SCHEDULER_THREAD.')
 
@@ -790,7 +790,7 @@ def set_reccuring_group(group_id, max_tasks, priority = 0):
     }
 
 
-def write_execution_log():
+def _write_execution_log():
     global _EXECUTION_LOG_DATA
     global _EXECUTION_LOG_DATA_CHANGED
     global _EXECUTION_LOG_DATA_LOCK
@@ -830,7 +830,7 @@ def write_execution_log():
             _EXECUTION_LOG_THREAD_COND.wait(_EXECUTION_LOG_WRITE_INTERVAL.seconds)
 
 
-_EXECUTION_LOG_THREAD = threading.Thread(target=write_execution_log)
+_EXECUTION_LOG_THREAD = threading.Thread(target=_write_execution_log)
 _EXECUTION_LOG_THREAD.start()
 
 # Read initial execution log, if exists
