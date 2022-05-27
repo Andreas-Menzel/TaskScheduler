@@ -23,7 +23,41 @@ _EXECUTION_LOG_DATA_CHANGED = True
 _EXECUTION_LOG_DATA_LOCK = threading.Lock()
 
 
-# This holds information about all tasks
+# {
+#     'datetime': {
+#         <task_id_1>: {
+#             'function' : <function>,
+#             'arguments': <arguments>,
+#             'time'     : {
+#                 'years'    : <years>,
+#                 'months'   : <months>,
+#                 'weeks'    : <weeks>,
+#                 'days'     : <days>,
+#                 'hours'    : <hours>,
+#                 'minutes'  : <minutes>,
+#                 'seconds'  : <second>s
+#                 }
+#         }, ...
+#     },
+#     'reccuring': {
+#         'tasks': {
+#             <task_id_1>: {
+#                 'groups'        : groups,
+#                 'function'      : function,
+#                 'arguments'     : arguments,
+#                 'timedelta'     : timedelta,
+#                 'max_instances' : max_instances,
+#                 'priority'      : priority
+#             }, ...
+#         },
+#         'groups': {
+#             <group_id_1>: {
+#                 'max_tasks' : max_tasks,
+#                 'priority'  : priority
+#             }, ...
+#         }
+#     }
+# }
 _SCHEDULE_TASKS = { 'datetime': {}, 'reccuring': {'tasks': {}, 'groups': {}} }
 
 
