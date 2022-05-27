@@ -18,7 +18,7 @@ def test_function(task_id = None):
 
 
 file_execution_log = 'TaskScheduler_execution.log'
-execution_log_write_interval = timedelta(seconds=1)
+execution_log_write_interval = timedelta(seconds=5)
 execution_log_thread = None
 execution_log_thread_cond = threading.Condition()
 # {
@@ -26,6 +26,7 @@ execution_log_thread_cond = threading.Condition()
 #     'reccuring': { <task_id_1>: <last_execution_datetime>, ... }
 # }
 execution_log_data = { 'datetime': {}, 'reccuring': {} }
+execution_log_data_changed = True
 execution_log_data_lock = threading.Lock()
 
 
@@ -81,8 +82,9 @@ reccuring_tasks_running_lock = threading.Lock()
 #               has to be executed in a seperate thread. Use notify() whenever a
 #               new task is added.
 def datetime_scheduler_main(cond_obj):
-    global execution_log_data_lock
     global execution_log_data
+    global execution_log_data_changed
+    global execution_log_data_lock
     global execution_log_thread_cond
     global datetime_tasks_added
     global datetime_tasks_added_lock
@@ -137,6 +139,7 @@ def datetime_scheduler_main(cond_obj):
                 # Add function execution to execution log
                 execution_log_data_lock.acquire()
                 execution_log_data['datetime'][task_id] = datetime.now().isoformat()
+                execution_log_data_changed = True
                 execution_log_data_lock.release()
 
                 # Notify execution logger
@@ -447,8 +450,9 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
 # @note     The first execution of function will be immediately after calling
 #               this function.
 def reccuring_scheduler_main(cond_obj):
-    global execution_log_data_lock
     global execution_log_data
+    global execution_log_data_changed
+    global execution_log_data_lock
     global reccuring_tasks_added
     global reccuring_tasks_added_lock
     global schedule_tasks
@@ -591,6 +595,7 @@ def reccuring_scheduler_main(cond_obj):
                         # Add function execution to execution log
                         execution_log_data_lock.acquire()
                         execution_log_data['reccuring'][task] = datetime.now()
+                        execution_log_data_changed = True
                         execution_log_data_lock.release()
 
                         # Notify execution logger
@@ -753,6 +758,7 @@ def set_reccuring_group(group_id, max_tasks, priority = 0):
 
 def write_execution_log():
     global execution_log_data
+    global execution_log_data_changed
     global execution_log_data_lock
     global execution_log_thread_cond
     global execution_log_write_interval
@@ -760,9 +766,12 @@ def write_execution_log():
 
     last_write = datetime.now()
 
-    # TODO: only write if has changed.
-
     while True:
+        # Check if execution_log_data has changed
+        if not execution_log_data_changed:
+            with execution_log_thread_cond:
+                execution_log_thread_cond.wait()
+
         # Wait if new file write would be too soon
         if last_write + execution_log_write_interval > datetime.now():
             with execution_log_thread_cond:
@@ -778,6 +787,7 @@ def write_execution_log():
         execution_log_data_lock.acquire()
         with open(file_execution_log, 'w', encoding='utf-8') as file:
             json.dump(execution_log_data, file, ensure_ascii=False, indent=4, default=str)
+        execution_log_data_changed = False
         execution_log_data_lock.release()
 
         last_write = datetime.now()
@@ -804,8 +814,8 @@ set_reccuring_group('group1', 2, priority = 0)
 
 # DEBUG: Test task. Can be removed after testing.
 reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=1), True, 3, (10, 1))
-reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
-reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
+#reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
+#reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
 
 
 #set_reccuring_group('small_backup', 2, priority = 0)
