@@ -120,6 +120,7 @@ def datetime_scheduler_main(cond_obj):
         datetime_tasks_added_lock.release()
 
         # get next task and execution time (seconds remaining) and start tasks
+        remove_tasks = []
         max_wait = -1
         for task_id, task in tasks.items():
             time_diff = task - datetime.now()
@@ -156,18 +157,24 @@ def datetime_scheduler_main(cond_obj):
                 seconds = task_time['seconds']
                 next_execution_time = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
-                logger.debug(f'Next execution of datetime-task "{task_id}" is scheduled at {next_execution_time}.')
+                if not next_execution_time is None:
+                    logger.debug(f'Next execution of datetime-task "{task_id}" is scheduled at {next_execution_time}.')
 
-                # TODO: None
+                    tasks[task_id] = next_execution_time
 
-                tasks[task_id] = next_execution_time
+                    time_diff = next_execution_time - datetime.now()
+                    seconds_remaining = time_diff.total_seconds()
 
-                time_diff = next_execution_time - datetime.now()
-                seconds_remaining = time_diff.total_seconds()
+                    if seconds_remaining > 0:
+                        if seconds_remaining < max_wait or max_wait == -1:
+                            max_wait = seconds_remaining
+                else:
+                    logger.info(f'Datetime-task "{task_id}" does not have an execution datetime in the future. Removing task.')
 
-                if seconds_remaining > 0:
-                    if seconds_remaining < max_wait or max_wait == -1:
-                        max_wait = seconds_remaining
+                    remove_tasks.append(task_id)
+
+        for task_id in remove_tasks:
+            del tasks[task_id]
 
         with cond_obj:
             if max_wait > 0:
@@ -805,7 +812,7 @@ if os.path.isfile(file_execution_log):
         execution_log_data = json.load(file)
 
 # DEBUG: Test task. Can be removed after testing.
-#datetime_schedule('DTS_test_task', test_function, [], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+datetime_schedule('DTS_test_task', test_function, [], [2022], [5], [], [27], [17], [59], [30, 31, 32, 33], catchup = False, catchup_delay = None)
 #datetime_schedule('DTS_test_task2', test_function, [], [2020], [], [], [], [], [], [], catchup = False, catchup_delay = None)
 
 
@@ -813,7 +820,7 @@ if os.path.isfile(file_execution_log):
 set_reccuring_group('group1', 2, priority = 0)
 
 # DEBUG: Test task. Can be removed after testing.
-reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=1), True, 3, (10, 1))
+#reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=1), True, 3, (10, 1))
 #reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
 #reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
 
