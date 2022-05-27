@@ -5,12 +5,16 @@ from datetime import date, datetime, timedelta
 import time
 import os.path
 
+import logHandler
+
+logger = logHandler.getSimpleLogger(__name__, streamLogLevel=logHandler.DEBUG, fileLogLevel=logHandler.DEBUG)
+
 
 # DEBUG: Test function. Can be removed after testing.
-def test_function(task_id):
-    print(f'+ Started task {task_id}.')
+def test_function(task_id = None):
+    #print(f'+ Started task {task_id}.')
     time.sleep(2)
-    print(f'- Stopped task {task_id}.')
+    #print(f'- Stopped task {task_id}.')
 
 
 file_execution_log = 'TaskScheduler_execution.log'
@@ -83,6 +87,7 @@ def datetime_scheduler_main(cond_obj):
     global datetime_tasks_added
     global datetime_tasks_added_lock
     global schedule_tasks
+    global logger
 
     # <task_id> : <next_execution_time>
     tasks = {}
@@ -107,6 +112,8 @@ def datetime_scheduler_main(cond_obj):
                 next_execution_time = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
                 tasks[task] = next_execution_time
+
+                logger.debug(f'Datetime scheduling task "{task}" was added recently. Added task to internal dictionary.')
             datetime_tasks_added = []
         datetime_tasks_added_lock.release()
 
@@ -122,6 +129,7 @@ def datetime_scheduler_main(cond_obj):
                     max_wait = seconds_remaining
             else:
                 # task should be started
+                logger.info(f'Starting datetime-task "{task_id}".')
                 task_information = schedule_tasks['datetime'][task_id]
                 task_thread = threading.Thread(target=task_information['function'], args=(task_information['arguments'])).start()
 
@@ -143,6 +151,8 @@ def datetime_scheduler_main(cond_obj):
                 minutes = task_time['minutes']
                 seconds = task_time['seconds']
                 next_execution_time = get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
+
+                logger.debug(f'Next execution of datetime-task "{task_id}" is scheduled at {next_execution_time}.')
 
                 # TODO: None
 
@@ -320,17 +330,21 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
     global datetime_tasks_added
     global datetime_tasks_added_lock
     global schedule_tasks
+    global logger
 
     # Create and start the scheduling thread if it does not yet exist.
     if datetime_scheduler_thread is None:
-        datetime_scheduler_thread = threading.Thread(target=datetime_scheduler_main, args=(datetime_scheduler_cond,)).start()
+        datetime_scheduler_thread = threading.Thread(target=datetime_scheduler_main, args=(datetime_scheduler_cond,))
+        datetime_scheduler_thread.start()
+        logger.debug('Created and started datetime_scheduler_thread.')
 
 
     scheduler = schedule_tasks['datetime']
 
     # Check if task_id is unused
     if task_id in scheduler:
-        raise ValueError(f'Task-ID "{task_id}" is already in use!')
+        logger.critical(f'Datetime-Task-ID "{task_id}" is already in use!')
+        raise ValueError(f'Datetime-Task-ID "{task_id}" is already in use!')
 
     # Convert time variables to lists, if necessary
     if year is None:
@@ -414,6 +428,10 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
         with datetime_scheduler_cond:
             datetime_scheduler_cond.notify()
 
+        logger.info(f'Added datetime-task "{task_id}".')
+    else:
+        logger.info(f'Did not add datetime-task "{task_id}". No future execution datetime.')
+
 
 # reccuring_scheduler_main
 #
@@ -433,6 +451,7 @@ def reccuring_scheduler_main(cond_obj):
     global reccuring_tasks_added
     global reccuring_tasks_added_lock
     global schedule_tasks
+    global logging
 
     # <task_id> : <next_execution_time>
     all_tasks = {}
@@ -451,6 +470,8 @@ def reccuring_scheduler_main(cond_obj):
                 else:
                     next_execution_time = last_execution_datetime + schedule_tasks['reccuring']['tasks'][task]['timedelta']
                 all_tasks[task] = next_execution_time
+
+                logger.debug(f'Reccuring-task "{task}" was added recently. Added task to internal dictionary.')
             reccuring_tasks_added = []
         reccuring_tasks_added_lock.release()
 
@@ -525,15 +546,13 @@ def reccuring_scheduler_main(cond_obj):
                 group_currently_running = rtr['groups'][group_id]['currently_running']
                 group_max_tasks = schedule_tasks['reccuring']['groups'][group_id]['max_tasks']
                 if not group_max_tasks == -1 and group_currently_running >= group_max_tasks:
-                    # DEBUG
-                    print(f'Not starting task. Already running maximum number of tasks in this group: {group_currently_running} / {schedule_tasks["reccuring"]["groups"][group_id]["max_tasks"]}')
+                    logger.info(f'Not starting reccuring-task. Already running maximum number of tasks in this group: {group_currently_running} / {schedule_tasks["reccuring"]["groups"][group_id]["max_tasks"]}')
                     continue
 
                 task_priorities_sorted = sorted(list(group.keys()), reverse = True)
                 for task_priority in task_priorities_sorted:
                     tasks = group[task_priority]
                     for task in tasks:
-
 
                         # Add task if not exist
                         if not task in rtr['tasks']:
@@ -546,8 +565,7 @@ def reccuring_scheduler_main(cond_obj):
                         task_currently_running = rtr['tasks'][task]['currently_running']
                         task_max_instances = schedule_tasks['reccuring']['tasks'][task]['max_instances']
                         if not task_max_instances == -1 and task_currently_running >= task_max_instances:
-                            # DEBUG
-                            print('Not starting task. Already running maximum number of instances.')
+                            logger.info(f'Not starting reccuring-task "{task}". Already running maximum number of instances: {task_max_instances}')
                             continue
 
                         # Increase running counter
@@ -562,6 +580,7 @@ def reccuring_scheduler_main(cond_obj):
                             rtr['groups'][task_group]['currently_running'] += 1
 
 
+                        logger.info(f'Starting reccuring-task "{task}".')
                         task_information = schedule_tasks['reccuring']['tasks'][task]
                         task_thread = threading.Thread(target=reccuring_scheduler_execute_function, args=(  cond_obj,
                                                                                                             task, task_information['groups'],
@@ -577,6 +596,7 @@ def reccuring_scheduler_main(cond_obj):
                             execution_log_thread_cond.notify()
 
                         next_execution_time = datetime.now() + task_information['timedelta']
+                        logger.debug(f'Next execution of reccuring-task "{task}" is scheduled at {next_execution_time}.')
 
                         all_tasks[task] = next_execution_time
 
@@ -664,16 +684,19 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
     global reccuring_tasks_added
     global reccuring_tasks_added_lock
     global schedule_tasks
+    global logger
 
     # Create and start the scheduling thread if it does not yet exist.
     if reccuring_scheduler_thread is None:
         reccuring_scheduler_thread = threading.Thread(target=reccuring_scheduler_main, args=(reccuring_scheduler_cond,)).start()
+        logger.debug('Created and started reccuring_scheduler_thread.')
 
     scheduler = schedule_tasks['reccuring']['tasks']
 
     # Check if task_id is unused
     if task_id in scheduler:
-        raise ValueError(f'Task-ID "{task_id}" is already in use!')
+        logger.critical(f'Reccuring-Task-ID "{task_id}" is already in use!')
+        raise ValueError(f'Reccuring-Task-ID "{task_id}" is already in use!')
 
     scheduler[task_id] = {
         'groups'        : groups,
@@ -683,6 +706,8 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
         'max_instances' : max_instances,
         'priority'      : priority
         }
+
+    logger.info(f'Added reccuring-task "{task_id}".')
 
     last_execution_datetime = None
     if use_exec_log:
@@ -713,6 +738,7 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
 # @info     Set max_tasks = -1 for unlimited tasks.
 def set_reccuring_group(group_id, max_tasks, priority = 0):
     global schedule_tasks
+    global logger
 
     groups = schedule_tasks['reccuring']['groups']
 
@@ -731,6 +757,8 @@ def write_execution_log():
 
     last_write = datetime.now()
 
+    # TODO: only write if has changed.
+
     while True:
         # Wait if new file write would be too soon
         if last_write + execution_log_write_interval > datetime.now():
@@ -741,6 +769,8 @@ def write_execution_log():
                     max_wait = 0.5
                 execution_log_thread_cond.wait(max_wait)
                 continue
+
+        logger.debug('Writing execution-log to file.')
 
         execution_log_data_lock.acquire()
         with open(file_execution_log, 'w', encoding='utf-8') as file:
@@ -761,24 +791,25 @@ if os.path.isfile(file_execution_log):
         execution_log_data = json.load(file)
 
 # DEBUG: Test task. Can be removed after testing.
-#datetime_schedule('DTS_test_task', test_function, [], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+datetime_schedule('DTS_test_task', test_function, [], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+datetime_schedule('DTS_test_task2', test_function, [], [2020], [], [], [], [], [], [], catchup = False, catchup_delay = None)
 
 
 # DEBUG: Test group
-#set_reccuring_group('group1', 2, priority = 0)
+set_reccuring_group('group1', 2, priority = 0)
 
 # DEBUG: Test task. Can be removed after testing.
-#reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=10), True, 3, (10, 1))
-#reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
-#reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
+reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=10), True, 3, (10, 1))
+reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
+reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
 
 
-set_reccuring_group('small_backup', 2, priority = 0)
-
-reccuring_schedule('2_sec_backup', ['small_backup'], test_function, ['2_sec_backup'], timedelta(seconds=2), True, 1, (10, 1))
-
-reccuring_schedule('5_sec_backup', ['small_backup'], test_function, ['5_sec_backup'], timedelta(seconds=5))
-
-# TODO: andere Reihenfolge?
-reccuring_schedule('5_sec_backup', test_function, timedelta(seconds=5), ['5_sec_backup'], ['small_backup'])
-reccuring_schedule('5_sec_backup', test_function, timedelta(seconds=5))
+#set_reccuring_group('small_backup', 2, priority = 0)
+#
+#reccuring_schedule('2_sec_backup', ['small_backup'], test_function, ['2_sec_backup'], timedelta(seconds=2), True, 1, (10, 1))
+#
+#reccuring_schedule('5_sec_backup', ['small_backup'], test_function, ['5_sec_backup'], timedelta(seconds=5))
+#
+## TODO: andere Reihenfolge?
+#reccuring_schedule('5_sec_backup', test_function, timedelta(seconds=5), ['5_sec_backup'], ['small_backup'])
+#reccuring_schedule('5_sec_backup', test_function, timedelta(seconds=5))
