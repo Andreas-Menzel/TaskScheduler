@@ -131,7 +131,8 @@ def datetime_scheduler_main(cond_obj):
                 # task should be started
                 logger.info(f'Starting datetime-task "{task_id}".')
                 task_information = schedule_tasks['datetime'][task_id]
-                task_thread = threading.Thread(target=task_information['function'], args=(task_information['arguments'])).start()
+                task_thread = threading.Thread(target=task_information['function'], args=(task_information['arguments']))
+                task_thread.start()
 
                 # Add function execution to execution log
                 execution_log_data_lock.acquire()
@@ -546,7 +547,7 @@ def reccuring_scheduler_main(cond_obj):
                 group_currently_running = rtr['groups'][group_id]['currently_running']
                 group_max_tasks = schedule_tasks['reccuring']['groups'][group_id]['max_tasks']
                 if not group_max_tasks == -1 and group_currently_running >= group_max_tasks:
-                    logger.info(f'Not starting reccuring-task. Already running maximum number of tasks in this group: {group_currently_running} / {schedule_tasks["reccuring"]["groups"][group_id]["max_tasks"]}')
+                    logger.info(f'Not starting reccuring-task. Already running maximum number of tasks in group "{group_id}": {group_currently_running} / {schedule_tasks["reccuring"]["groups"][group_id]["max_tasks"]}')
                     continue
 
                 task_priorities_sorted = sorted(list(group.keys()), reverse = True)
@@ -584,7 +585,8 @@ def reccuring_scheduler_main(cond_obj):
                         task_information = schedule_tasks['reccuring']['tasks'][task]
                         task_thread = threading.Thread(target=reccuring_scheduler_execute_function, args=(  cond_obj,
                                                                                                             task, task_information['groups'],
-                                                                                                            task_information['function'], task_information['arguments'])).start()
+                                                                                                            task_information['function'], task_information['arguments']))
+                        task_thread.start()
 
                         # Add function execution to execution log
                         execution_log_data_lock.acquire()
@@ -688,7 +690,8 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
 
     # Create and start the scheduling thread if it does not yet exist.
     if reccuring_scheduler_thread is None:
-        reccuring_scheduler_thread = threading.Thread(target=reccuring_scheduler_main, args=(reccuring_scheduler_cond,)).start()
+        reccuring_scheduler_thread = threading.Thread(target=reccuring_scheduler_main, args=(reccuring_scheduler_cond,))
+        reccuring_scheduler_thread.start()
         logger.debug('Created and started reccuring_scheduler_thread.')
 
     scheduler = schedule_tasks['reccuring']['tasks']
@@ -783,7 +786,8 @@ def write_execution_log():
             execution_log_thread_cond.wait(execution_log_write_interval.seconds)
 
 
-execution_log_thread = threading.Thread(target=write_execution_log).start()
+execution_log_thread = threading.Thread(target=write_execution_log)
+execution_log_thread.start()
 
 # Read initial execution log, if exists
 if os.path.isfile(file_execution_log):
@@ -791,15 +795,15 @@ if os.path.isfile(file_execution_log):
         execution_log_data = json.load(file)
 
 # DEBUG: Test task. Can be removed after testing.
-datetime_schedule('DTS_test_task', test_function, [], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
-datetime_schedule('DTS_test_task2', test_function, [], [2020], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+#datetime_schedule('DTS_test_task', test_function, [], [], [], [], [], [], [], [], catchup = False, catchup_delay = None)
+#datetime_schedule('DTS_test_task2', test_function, [], [2020], [], [], [], [], [], [], catchup = False, catchup_delay = None)
 
 
 # DEBUG: Test group
 set_reccuring_group('group1', 2, priority = 0)
 
 # DEBUG: Test task. Can be removed after testing.
-reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=10), True, 3, (10, 1))
+reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=1), True, 3, (10, 1))
 reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
 reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
 
