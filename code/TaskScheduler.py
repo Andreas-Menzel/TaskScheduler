@@ -7,14 +7,14 @@ import os.path
 
 
 # DEBUG: Test function. Can be removed after testing.
-def test_function():
-    print(f'Test function started.')
+def test_function(task_id):
+    print(f'+ Started task {task_id}.')
     time.sleep(2)
-    print(f'Test function ended.')
+    print(f'- Stopped task {task_id}.')
 
 
 file_execution_log = 'TaskScheduler_execution.log'
-execution_log_write_interval = timedelta(seconds=5)
+execution_log_write_interval = timedelta(seconds=1)
 execution_log_thread = None
 execution_log_thread_cond = threading.Condition()
 # {
@@ -657,7 +657,7 @@ def reccuring_scheduler_execute_function(scheduler_cond, task_id, task_groups, f
 #                                           overdue.
 #
 # @info     total_priority = first_val + <seconds_overdue> * second_val
-def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec_log, max_instances = 1, priority = (0, 0)):
+def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec_log = True, max_instances = 1, priority = (0, 0)):
     global execution_log_data
     global reccuring_scheduler_cond
     global reccuring_scheduler_thread
@@ -765,9 +765,20 @@ if os.path.isfile(file_execution_log):
 
 
 # DEBUG: Test group
-set_reccuring_group('group1', 2, priority = 0)
+#set_reccuring_group('group1', 2, priority = 0)
 
 # DEBUG: Test task. Can be removed after testing.
-reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=10), True, 3, (10, 1))
+#reccuring_schedule('RCS_test_task1', ['group1'], test_function, [], timedelta(seconds=10), True, 3, (10, 1))
 #reccuring_schedule('RCS_test_task2', ['group1'], test_function, [], timedelta(seconds=5), True, 1, (10, 1))
 #reccuring_schedule('test_task3', ['group2'], test_function, [], timedelta(seconds=7), True, 1, (10, 1))
+
+
+set_reccuring_group('small_backup', 2, priority = 0)
+
+reccuring_schedule('2_sec_backup', ['small_backup'], test_function, ['2_sec_backup'], timedelta(seconds=2), True, 1, (10, 1))
+
+reccuring_schedule('5_sec_backup', ['small_backup'], test_function, ['5_sec_backup'], timedelta(seconds=5))
+
+# TODO: andere Reihenfolge?
+reccuring_schedule('5_sec_backup', test_function, timedelta(seconds=5), ['5_sec_backup'], ['small_backup'])
+reccuring_schedule('5_sec_backup', test_function, timedelta(seconds=5))
