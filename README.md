@@ -61,8 +61,37 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
 
 #### Examples
 
-`TODO`
+##### Simple server-side planning
+```
+import TaskScheduler
 
+def backup():
+    # make backup
+    print('Backup finished.')
+
+# Start backup every day at 3:00 AM
+datetime_schedule('dailyBackup', backup, [], None, None, None, None, 3, 0, 0)
+
+# Start backup every day at 3:00 AM if month is between January and April
+datetime_schedule('dailyBackupJanToApr', backup, [], None, [1, 2, 3, 4], None, None, 3, 0, 0)
+
+# Start backup on the first day of every month at 3:00 AM
+datetime_schedule('monthlyBackup', backup, [], None, None, None, 1, 3, 0, 0)
+```
+
+##### Simple laptop-side planning
+```
+import TaskScheduler
+
+def backup():
+    # make backup
+    print('Backup finished.')
+
+# Start backup every day at 3:00 AM.
+# If the laptop was turned off at 3:00 AM, start the backup when starting the
+#     script with a delay between 30 seconds and 5 minutes.
+datetime_schedule('dailyBackup', backup, [], None, None, None, None, 3, 0, 0, True, (30, 300))
+```
 
 ### Reccuring tasks
 
