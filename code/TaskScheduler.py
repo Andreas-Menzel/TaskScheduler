@@ -769,7 +769,7 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
         _RECCURING_SCHEDULER_COND.notify()
 
 
-# reccuring_group
+# set_reccuring_group
 #
 # @param    string      group_id        Group ID.
 # @param    int         max_tasks       Maximum number of tasks allowed to run
