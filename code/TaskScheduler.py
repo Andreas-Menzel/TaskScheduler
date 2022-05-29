@@ -570,6 +570,9 @@ def _reccuring_scheduler_main(cond_obj):
         _RECCURING_TASKS_RUNNING_LOCK.acquire()
         rtr = _RECCURING_TASKS_RUNNING
         group_priorities_sorted = sorted(list(exec_tasks.keys()), reverse = True)
+        # All tasks that are started will be added here so a task is not started
+        #     multiple times if it is in multiple groups.
+        tasks_started = []
         for group_priority in group_priorities_sorted:
             groups = exec_tasks[group_priority]
             for group_id, group in groups.items():
@@ -592,6 +595,10 @@ def _reccuring_scheduler_main(cond_obj):
                 for task_priority in task_priorities_sorted:
                     tasks = group[task_priority]
                     for task in tasks:
+
+                        # Check if task has already been started
+                        if task in tasks_started:
+                            continue
 
                         # Add task if not exist
                         if not task in rtr['tasks']:
@@ -620,6 +627,7 @@ def _reccuring_scheduler_main(cond_obj):
 
 
                         _LOGGER.info(f'Starting reccuring-task "{task}".')
+                        tasks_started.append(task)
                         task_information = _SCHEDULE_TASKS['reccuring']['tasks'][task]
                         task_thread = threading.Thread(target=_reccuring_scheduler_execute_function, args=(  cond_obj,
                                                                                                             task, task_information['groups'],
