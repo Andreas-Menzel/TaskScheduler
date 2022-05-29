@@ -35,7 +35,7 @@ _EXECUTION_LOG_DATA_LOCK = threading.Lock()
 #                 'days'     : <days>,
 #                 'hours'    : <hours>,
 #                 'minutes'  : <minutes>,
-#                 'seconds'  : <second>s
+#                 'seconds'  : <second>
 #                 }
 #         }, ...
 #     },
