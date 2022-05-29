@@ -577,13 +577,6 @@ def _reccuring_scheduler_main(cond_obj):
             groups = exec_tasks[group_priority]
             for group_id, group in groups.items():
 
-                # Add group if not exist
-                if not group_id in rtr['groups']:
-                    rtr['groups'][group_id] = {}
-                # Add currently_running if not exist
-                if not 'currently_running' in rtr['groups'][group_id]:
-                    rtr['groups'][group_id]['currently_running'] = 0
-
                 # Check if another task can be started in this group
                 group_currently_running = rtr['groups'][group_id]['currently_running']
                 group_max_tasks = _SCHEDULE_TASKS['reccuring']['groups'][group_id]['max_tasks']
@@ -600,13 +593,6 @@ def _reccuring_scheduler_main(cond_obj):
                         if task in tasks_started:
                             continue
 
-                        # Add task if not exist
-                        if not task in rtr['tasks']:
-                            rtr['tasks'][task] = {}
-                        # Add currently_running if not exist
-                        if not 'currently_running' in rtr['tasks'][task]:
-                            rtr['tasks'][task]['currently_running'] = 0
-
                         # Check if another instance of this task can be started
                         task_currently_running = rtr['tasks'][task]['currently_running']
                         task_max_instances = _SCHEDULE_TASKS['reccuring']['tasks'][task]['max_instances']
@@ -614,15 +600,21 @@ def _reccuring_scheduler_main(cond_obj):
                             _LOGGER.info(f'Not starting reccuring-task "{task}". Already running maximum number of instances: {task_max_instances}')
                             continue
 
+                        # Check if all groups of this task have free capacity
+                        enough_capacity = True
+                        s_task = _SCHEDULE_TASKS['reccuring']['tasks'][task_id]
+                        for task_group_id in s_task['groups']:
+                            task_group_currently_running = rtr['groups'][task_group_id]['currently_running']
+                            task_group_max_tasks = _SCHEDULE_TASKS['reccuring']['groups'][task_group_id]['max_tasks']
+                            if not task_group_max_tasks == -1 and task_group_currently_running >= task_group_max_tasks:
+                                enough_capacity = False
+                                break
+                        if not enough_capacity:
+                            continue
+
                         # Increase running counter
                         rtr['tasks'][task]['currently_running'] += 1
-
-                        # Add groups if not exist
                         for task_group in _SCHEDULE_TASKS['reccuring']['tasks'][task]['groups']:
-                            if not task_group in rtr['groups']:
-                                rtr['groups'][task_group] = {}
-                            if not 'currently_running' in rtr['groups'][task_group]:
-                                rtr['groups'][task_group]['currently_running'] = 0
                             rtr['groups'][task_group]['currently_running'] += 1
 
 
@@ -726,20 +718,16 @@ def _reccuring_scheduler_execute_function(scheduler_cond, task_id, task_groups, 
 #                                           overdue.
 #
 # @info     total_priority = first_val + <seconds_overdue> * second_val
-def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec_log = True, max_instances = 1, priority = (0, 0)):
+def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec_log = False, max_instances = 1, priority = (0, 0)):
     global _EXECUTION_LOG_DATA
     global _RECCURING_SCHEDULER_COND
     global _RECCURING_SCHEDULER_THREAD
     global _RECCURING_TASKS_ADDED
     global _RECCURING_TASKS_ADDED_LOCK
+    global _RECCURING_TASKS_RUNNING
+    global _RECCURING_TASKS_RUNNING_LOCK
     global _SCHEDULE_TASKS
     global _LOGGER
-
-    # Create and start the scheduling thread if it does not yet exist.
-    if _RECCURING_SCHEDULER_THREAD is None:
-        _RECCURING_SCHEDULER_THREAD = threading.Thread(target=_reccuring_scheduler_main, args=(_RECCURING_SCHEDULER_COND,))
-        _RECCURING_SCHEDULER_THREAD.start()
-        _LOGGER.debug('Created and started _RECCURING_SCHEDULER_THREAD.')
 
     scheduler = _SCHEDULE_TASKS['reccuring']['tasks']
 
@@ -747,6 +735,12 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
     if task_id in scheduler:
         _LOGGER.critical(f'Reccuring-Task-ID "{task_id}" is already in use!')
         raise ValueError(f'Reccuring-Task-ID "{task_id}" is already in use!')
+
+    # Create and start the scheduling thread if it does not yet exist.
+    if _RECCURING_SCHEDULER_THREAD is None:
+        _RECCURING_SCHEDULER_THREAD = threading.Thread(target=_reccuring_scheduler_main, args=(_RECCURING_SCHEDULER_COND,))
+        _RECCURING_SCHEDULER_THREAD.start()
+        _LOGGER.debug('Created and started _RECCURING_SCHEDULER_THREAD.')
 
     scheduler[task_id] = {
         'groups'        : groups,
@@ -773,6 +767,14 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
         if not group in _SCHEDULE_TASKS['reccuring']['groups']:
             set_reccuring_group(group, -1)
 
+    with _RECCURING_TASKS_RUNNING_LOCK:
+        # Add task to _RECCURING_TASKS_RUNNING if not exist
+        if not task_id in _RECCURING_TASKS_RUNNING['tasks']:
+            _RECCURING_TASKS_RUNNING['tasks'][task_id] = {}
+        # Add currently_running if not exist
+        if not 'currently_running' in _RECCURING_TASKS_RUNNING['tasks'][task_id]:
+            _RECCURING_TASKS_RUNNING['tasks'][task_id]['currently_running'] = 0
+
     with _RECCURING_SCHEDULER_COND:
         _RECCURING_SCHEDULER_COND.notify()
 
@@ -789,13 +791,23 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
 def set_reccuring_group(group_id, max_tasks, priority = 0):
     global _SCHEDULE_TASKS
     global _LOGGER
+    global _RECCURING_TASKS_RUNNING
+    global _RECCURING_TASKS_RUNNING_LOCK
 
+    # Set group attributes
     groups = _SCHEDULE_TASKS['reccuring']['groups']
-
     groups[group_id] = {
         'max_tasks' : max_tasks,
         'priority'  : priority
     }
+
+    with _RECCURING_TASKS_RUNNING_LOCK:
+        # Add group to _RECCURING_TASKS_RUNNING if not exist
+        if not group_id in _RECCURING_TASKS_RUNNING['groups']:
+            _RECCURING_TASKS_RUNNING['groups'][group_id] = {}
+        # Add currently_running if not exist
+        if not 'currently_running' in _RECCURING_TASKS_RUNNING['groups'][group_id]:
+            _RECCURING_TASKS_RUNNING['groups'][group_id]['currently_running'] = 0
 
 
 def _write_execution_log():
