@@ -2,16 +2,17 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 import json
 import os.path
+from random import randrange
 import threading
 import time
 
 import logHandler
 
-_LOGGER = logHandler.getSimpleLogger(__name__, streamLogLevel=logHandler.DEBUG, fileLogLevel=logHandler.DEBUG)
+_LOGGER = logHandler.getSimpleLogger(__name__, streamLogLevel=logHandler.INFO, fileLogLevel=logHandler.DEBUG)
 
 
 _FILE_EXECUTION_LOG = 'TaskScheduler_execution.log'
-_EXECUTION_LOG_WRITE_INTERVAL = timedelta(seconds=5)
+_EXECUTION_LOG_WRITE_INTERVAL = timedelta(seconds=1)
 _EXECUTION_LOG_THREAD = None
 _EXECUTION_LOG_THREAD_COND = threading.Condition()
 # {
@@ -422,8 +423,8 @@ def _get_next_execution_datetime(years, months, weeks, days, hours, minutes, sec
 #
 # @param    bool        catchup         Catch-up scheduling events that occured
 #                                           when the script was not running.
-# @param    int         catchup_delay   Max delay (in seconds) for starting the
-#                                           catch-up jobs.
+# @param    (int, int)  catchup_delay   Min and Max delay (in seconds) for
+#                                           starting the catch-up job.
 #
 # @info     Set year / month / ... = None or empty list to execute the function
 #               at every year / month / ...
@@ -516,11 +517,17 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
         if task_id in _EXECUTION_LOG_DATA['datetime']:
             last_execution_datetime = datetime.fromisoformat(_EXECUTION_LOG_DATA['datetime'][task_id])
             if last_execution_datetime < _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds, reverse=True):
-                next_execution_datetime = datetime.now()
+                if catchup_delay is None:
+                    next_execution_datetime = datetime.now()
+                    _LOGGER.info(f'Missed last datetime-task execution of task "{task_id}". Executing now.')
+                else:
+                    min_delay, max_delay = catchup_delay
+                    task_delay = randrange(min_delay, max_delay + 1)
+                    next_execution_datetime = datetime.now() + timedelta(seconds=task_delay)
+                    _LOGGER.info(f'Missed last datetime-task execution of task "{task_id}". Executing now with a delay of {task_delay} seconds.')
 
     if next_execution_datetime is None:
         next_execution_datetime = _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
-        _LOGGER.warning('Executing as planned.')
 
     # add scheduling event to scheduler if it should be executed in the future
     if not next_execution_datetime is None:
