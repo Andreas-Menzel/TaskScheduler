@@ -67,6 +67,9 @@ _DATETIME_SCHEDULER_THREAD = None
 
 # New task ids will be added here. The datetime scheduler will then activate
 #     these tasks according to the information in schedule_tasks.
+# {
+#     (<task_id_1>, <next_execution_time>), ...
+# }
 _DATETIME_TASKS_ADDED = []
 _DATETIME_TASKS_ADDED_LOCK = threading.Lock()
 
@@ -129,7 +132,7 @@ def _datetime_scheduler_main(cond_obj):
         # check if new tasks were added
         _DATETIME_TASKS_ADDED_LOCK.acquire()
         if _DATETIME_TASKS_ADDED:
-            for task in _DATETIME_TASKS_ADDED:
+            for task, next_execution_time in _DATETIME_TASKS_ADDED:
                 task_time = _SCHEDULE_TASKS['datetime'][task]['time']
                 years   = task_time['years']
                 months  = task_time['months']
@@ -138,7 +141,6 @@ def _datetime_scheduler_main(cond_obj):
                 hours   = task_time['hours']
                 minutes = task_time['minutes']
                 seconds = task_time['seconds']
-                next_execution_time = _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
 
                 tasks[task] = next_execution_time
 
@@ -223,12 +225,14 @@ def _datetime_scheduler_main(cond_obj):
 # @param    [int] minutes   Minutes.
 # @param    [int] seconds   Seconds.
 #
+# @param    bool  reverse   Reversed search.
+#
 # @info     Passing an empty list for a time parameter means all possible values
 #               are allowed.
 #
 # @returns  datetime        Datetime object of the next execution time.
 # @returns  None            None if no execution time in the future exists.
-def _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds):
+def _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds, reverse = False):
     now = datetime.now()
 
     if not years or years is None:
@@ -247,73 +251,137 @@ def _get_next_execution_datetime(years, months, weeks, days, hours, minutes, sec
         seconds = list(range(0, 60))
 
 
-    in_future = False
+    range_years   = range(0, len(years))
+    range_months  = range(0, len(months))
+    range_days    = range(0, len(days))
+    range_hours   = range(0, len(hours))
+    range_minutes = range(0, len(minutes))
+    range_seconds = range(0, len(seconds))
+
+    if reverse:
+        range_years   = reversed(range_years)
+        range_months  = reversed(range_months)
+        range_days    = reversed(range_days)
+        range_hours   = reversed(range_hours)
+        range_minutes = reversed(range_minutes)
+        range_seconds = reversed(range_seconds)
+
+
+    in_future = False   # for standard forward search
+    in_past = False     # for reversed search
 
     # Go through all dates starting with the smallest one. Skip dates that are
     #     in the past and / or invalid. The first valid datetime is the next
     #     execution time.
-    for i_year in range(0, len(years)):
+    for i_year in range_years:
         if i_year >= len(years):
             break
-        if years[i_year] < now.year:
-            continue
+        if not reverse:
+            if years[i_year] < now.year:
+                continue
+        else:
+            if years[i_year] > now.year:
+                continue
 
-        if years[i_year] > now.year:
-            in_future = True
+        if not reverse:
+            if years[i_year] > now.year:
+                in_future = True
+        else:
+            if years[i_year] < now.year:
+                in_past = True
 
-        for i_month in range(0, len(months)):
+        for i_month in range_months:
             if i_month >= len(months):
                 i_year += 1
                 i_month = 0
                 break
-            if not in_future and months[i_month] < now.month:
-                continue
+            if not reverse:
+                if not in_future and months[i_month] < now.month:
+                    continue
+            else:
+                if not in_past and months[i_month] > now.month:
+                    continue
 
-            if not in_future and months[i_month] > now.month:
-                in_future = True
+            if not reverse:
+                if not in_future and months[i_month] > now.month:
+                    in_future = True
+            else:
+                if not in_past and months[i_month] < now.month:
+                    in_past = True
 
-            for i_day in range(0, len(days)):
+            for i_day in range_days:
                 if i_day >= len(days):
                     i_month += 1
                     i_day = 0
                     break
                 if days[i_day] > (lambda x: x[1])(monthrange(years[i_year], months[i_month])):
                     continue
-                if not in_future and days[i_day] < now.day:
-                    continue
+
+                if not reverse:
+                    if not in_future and days[i_day] < now.day:
+                        continue
+                else:
+                    if not in_past and days[i_day] > now.day:
+                        continue
 
                 week_number = date(years[i_year], months[i_month], days[i_day]).isocalendar().week
                 if not week_number in weeks:
                     continue
 
-                if not in_future and days[i_day] > now.day:
-                    in_future = True
+                if not reverse:
+                    if not in_future and days[i_day] > now.day:
+                        in_future = True
+                else:
+                    if not in_past and days[i_day] < now.day:
+                        in_past = True
 
-                for i_hour in range(0, len(hours)):
+                for i_hour in range_hours:
                     if i_hour >= len(hours):
                         i_day += 1
                         i_hour = 0
                         break
-                    if not in_future and hours[i_hour] < now.hour:
-                        continue
 
-                    if not in_future and hours[i_hour] > now.hour:
-                        in_future = True
+                    if not reverse:
+                        if not in_future and hours[i_hour] < now.hour:
+                            continue
+                    else:
+                        if not in_past and hours[i_hour] > now.hour:
+                            continue
 
-                    for i_minute in range(0, len(minutes)):
+                    if not reverse:
+                        if not in_future and hours[i_hour] > now.hour:
+                            in_future = True
+                    else:
+                        if not in_past and hours[i_hour] < now.hour:
+                            in_past = True
+
+                    for i_minute in range_minutes:
                         if i_minute >= len(minutes):
                             i_hour += 1
                             i_minute = 0
                             break
-                        if not in_future and minutes[i_minute] < now.minute:
-                            continue
 
-                        if not in_future and minutes[i_minute] > now.minute:
-                            in_future = True
-
-                        for i_second in range(0, len(seconds)):
-                            if not in_future and seconds[i_second] <= now.second:
+                        if not reverse:
+                            if not in_future and minutes[i_minute] < now.minute:
                                 continue
+                        else:
+                            if not in_past and minutes[i_minute] > now.minute:
+                                continue
+
+                        if not reverse:
+                            if not in_future and minutes[i_minute] > now.minute:
+                                in_future = True
+                        else:
+                            if not in_past and minutes[i_minute] < now.minute:
+                                in_past = True
+
+                        for i_second in range_seconds:
+                            if not reverse:
+                                if not in_future and seconds[i_second] <= now.second:
+                                    continue
+                            else:
+                                if not in_past and seconds[i_second] >= now.second:
+                                    continue
 
                             year   = years[i_year]
                             month  = months[i_month]
@@ -367,6 +435,7 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
     global _DATETIME_SCHEDULER_THREAD
     global _DATETIME_TASKS_ADDED
     global _DATETIME_TASKS_ADDED_LOCK
+    global _EXECUTION_LOG_DATA
     global _SCHEDULE_TASKS
     global _LOGGER
 
@@ -441,7 +510,17 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
         else:
             seconds = [second]
 
-    next_execution_datetime = _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
+
+    next_execution_datetime = None
+    if catchup:
+        if task_id in _EXECUTION_LOG_DATA['datetime']:
+            last_execution_datetime = datetime.fromisoformat(_EXECUTION_LOG_DATA['datetime'][task_id])
+            if last_execution_datetime < _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds, reverse=True):
+                next_execution_datetime = datetime.now()
+
+    if next_execution_datetime is None:
+        next_execution_datetime = _get_next_execution_datetime(years, months, weeks, days, hours, minutes, seconds)
+        _LOGGER.warning('Executing as planned.')
 
     # add scheduling event to scheduler if it should be executed in the future
     if not next_execution_datetime is None:
@@ -460,7 +539,7 @@ def datetime_schedule(task_id, function, arguments, year, month, week, day, hour
             }
 
         _DATETIME_TASKS_ADDED_LOCK.acquire()
-        _DATETIME_TASKS_ADDED.append(task_id)
+        _DATETIME_TASKS_ADDED.append((task_id, next_execution_datetime))
         _DATETIME_TASKS_ADDED_LOCK.release()
 
         with _DATETIME_SCHEDULER_COND:
