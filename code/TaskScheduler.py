@@ -729,6 +729,9 @@ def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec
     global _SCHEDULE_TASKS
     global _LOGGER
 
+    if groups == []:
+        groups = [f'#DEFAULT_GROUP#{task_id}#']
+
     scheduler = _SCHEDULE_TASKS['reccuring']['tasks']
 
     # Check if task_id is unused
