@@ -408,7 +408,7 @@ def _get_next_execution_datetime(years, months, weeks, days, hours, minutes, sec
 # @desc     Executes the function 'function' at the given time(s). This will
 #               create a new thread for each scheduling event.
 #
-# @param    string      task_id         Task identifier.
+# @param    string      task_id         Unique task identifier.
 #
 # @param    labmda      function        Function to be executed.
 # @param    []          arguments       Arguments for the function.
@@ -783,7 +783,7 @@ def _reccuring_scheduler_execute_function(scheduler_cond, task_id, task_groups, 
 #
 # @desc     Executes the function 'function' every delay seconds.
 #
-# @param    string      task_id         Task identifier.
+# @param    string      task_id         Unique task identifier.
 # @param    [string]    groups          Groups the task is part of.
 #
 # @param    labmda      function        Function to be executed.
