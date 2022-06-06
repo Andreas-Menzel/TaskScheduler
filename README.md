@@ -38,7 +38,7 @@ for more information on how to enable it.
 # @desc     Executes the function 'function' at the given time(s). This will
 #               create a new thread for each scheduling event.
 #
-# @param    string      task_id         Task identifier.
+# @param    string      task_id         Unique task identifier.
 #
 # @param    labmda      function        Function to be executed.
 # @param    []          arguments       Arguments for the function.
@@ -53,8 +53,8 @@ for more information on how to enable it.
 #
 # @param    bool        catchup         Catch-up scheduling events that occured
 #                                           when the script was not running.
-# @param    int         catchup_delay   Max delay (in seconds) for starting the
-#                                           catch-up jobs.
+# @param    (int, int)  catchup_delay   Min and Max delay (in seconds) for
+#                                           starting the catch-up job.
 #
 # @info     Set year / month / ... = None or empty list to execute the function
 #               at every year / month / ...
@@ -125,7 +125,7 @@ for more information on how to enable it.
 #
 # @desc     Executes the function 'function' every delay seconds.
 #
-# @param    string      task_id         Task identifier.
+# @param    string      task_id         Unique task identifier.
 # @param    [string]    groups          Groups the task is part of.
 #
 # @param    labmda      function        Function to be executed.
@@ -146,7 +146,7 @@ for more information on how to enable it.
 #                                           overdue.
 #
 # @info     total_priority = first_val + <seconds_overdue> * second_val
-def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec_log = True, max_instances = 1, priority = (0, 0)):
+def reccuring_schedule(task_id, groups, function, arguments, timedelta, use_exec_log = False, max_instances = 1, priority = (0, 0)):
     ...
 ```
 
