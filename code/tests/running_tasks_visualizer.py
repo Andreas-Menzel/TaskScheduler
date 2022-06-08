@@ -1,10 +1,13 @@
 import sys
 sys.path.append('..')
 import TaskScheduler
+import logHandler
 
 from datetime import timedelta
 from time import sleep
 
+
+_LOGGER = logHandler.getSimpleLogger(__name__, streamLogLevel=logHandler.INFO, fileLogLevel=logHandler.DEBUG)
 
 # {
 #     'datetime': {
@@ -32,6 +35,16 @@ running_tasks = { 'datetime': {}, 'reccuring': {} }
 
 def reccuring_function(task_id, function, arguments):
     global running_tasks
+
+    # Check if task should (not) be started
+    for group_id, group in groups['reccuring'].items():
+        current_executions = 0
+        if task_id in group['tasks']:
+            for task in group['tasks']:
+                if task in running_tasks['reccuring']:
+                    current_executions += running_tasks['reccuring'][task]
+        if current_executions >= group["max_executions"]:
+            _LOGGER.critical(f'Starting task "{task_id}", but group "{group_id}" is already running at limit: {current_executions} / {group["max_executions"]}')
 
     running_tasks['reccuring'][task_id] += 1
     function(*arguments)
