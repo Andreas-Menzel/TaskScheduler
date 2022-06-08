@@ -1,5 +1,5 @@
 import sys
-sys.path.append('../..')
+sys.path.append('..')
 import TaskScheduler
 
 from datetime import timedelta
